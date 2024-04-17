@@ -56,7 +56,7 @@ int main(int argc, char const *argv[])
     float ang_rad = ang_deg / 180. * 3.141592653589;
     float side = 0.25;
     int iter_cnt = 360 / ang_deg;
-    int rec_cnt = 4;
+    int rec_cnt = 3;
 
     std::vector<glm::vec2> visited;
     std::queue<std::pair<glm::vec2, int>> points;
