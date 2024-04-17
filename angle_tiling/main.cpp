@@ -38,13 +38,13 @@ int main(int argc, char const *argv[])
     std::vector<vku_vertex2d_t> vertices;
 
     glm::vec3 colors[] = {
-        glm::vec3(1, 1, 1),
-        glm::vec3(1, 0, 0),
-        glm::vec3(0, 1, 0),
-        glm::vec3(0, 0, 1),
-        glm::vec3(1, 0, 1),
-        glm::vec3(1, 1, 0),
-        glm::vec3(0, 1, 1),
+        glm::vec3(1, 1, 1), /* white */
+        glm::vec3(1, 0, 0), /* red */
+        glm::vec3(0, 1, 0), /* green */
+        glm::vec3(0, 0, 1), /* blue */
+        glm::vec3(1, 0, 1), /* magenta */
+        glm::vec3(1, 1, 0), /* yellow */
+        glm::vec3(0, 1, 1), /* cyan */
     };
 
     auto add_line = [&](glm::vec2 a, glm::vec2 b, int color) {
@@ -52,11 +52,11 @@ int main(int argc, char const *argv[])
         vertices.push_back(vku_vertex2d_t{ .pos = b, .color = colors[color] });
     };
 
-    float ang_deg = 30;
+    float ang_deg = 20;
     float ang_rad = ang_deg / 180. * 3.141592653589;
     float side = 0.25;
     int iter_cnt = 360 / ang_deg;
-    int rec_cnt = 3;
+    int rec_cnt = 4;
 
     std::vector<glm::vec2> visited;
     std::queue<std::pair<glm::vec2, int>> points;
@@ -68,6 +68,7 @@ int main(int argc, char const *argv[])
 
         for (int i = 0; i < iter_cnt; i++) {
             glm::vec2 new_point = origin + glm::vec2(cos(i * ang_rad), sin(i * ang_rad)) * side;
+    
             add_line(origin, new_point, rec_cnt - level);
 
             bool was_visited = false;
