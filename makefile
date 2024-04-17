@@ -1,7 +1,9 @@
 EXPERIMENTS := $(notdir $(shell find . -maxdepth 1 -type d))
 EXPERIMENTS := $(filter-out ., $(EXPERIMENTS))
-EXPERIMENTS := $(filter-out utils, $(EXPERIMENTS))
 EXPERIMENTS := $(filter-out .git, $(EXPERIMENTS))
+EXPERIMENTS := $(filter-out utils, $(EXPERIMENTS))
+EXPERIMENTS := $(filter-out imgui, $(EXPERIMENTS))
+EXPERIMENTS := $(filter-out implot, $(EXPERIMENTS))
 
 CLEAN-RULES:=${EXPERIMENTS:%=%-clean}
 ALL-RULES:=${EXPERIMENTS:%=%-all}
