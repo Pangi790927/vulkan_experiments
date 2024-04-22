@@ -8,6 +8,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#define MAX_UNIT_CNT 256
+
 struct part_t {
     glm::vec2 pos;
     glm::vec2 vel;
@@ -112,11 +114,6 @@ int main(int argc, char const *argv[])
         // 4, 5, 6, 6, 7, 4
     };
 
-    std::vector<vku_vertex3d_t> unit_vertices = {
-        {{ 0.5f, -0.5f,  0.0f}, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-        {{-0.5f,  0.5f,  0.0f}, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
-    };
-
     imag_params_t imag_params;
 
     vku_opts_t opts;
@@ -202,6 +199,59 @@ int main(int argc, char const *argv[])
     imag_params.heigth = img->height;
     memcpy(imag_params_pbuff, &imag_params, sizeof(imag_params));
 
+    std::vector<vku_vertex3d_t> unit_mesh = {
+        // traks:
+        {{ -1.0,  1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{ -1.0, -1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  1.0,  1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  1.0, -1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+
+        // body:
+        {{ -1.0,  0.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  0.0,  1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  0.0,  1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  1.0,  0.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  1.0,  0.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  0.0, -1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{  0.0, -1.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{ -1.0,  0.0, 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+
+        // gun:
+        {{ 1./3., 1./3., 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{ 1./3., 2.   , 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{ 1./6., 2.   , 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{ 1./2., 2.   , 0.0 }, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    };
+
+    std::vector<vku_vertex3d_t> units_vertices;
+    const float pi = 3.141592653589;
+
+    int map_width = imag_params.width;
+    int map_heigth = imag_params.heigth;
+
+    auto unit_transform = [&](auto &umesh, glm::vec2 pos, float angle) {
+        float scale_x = 2.0 / map_width;
+        float scale_y = 2.0 / map_heigth;
+
+        std::vector<vku_vertex3d_t> ret;
+        angle -= pi / 2.;
+        for (auto &u : unit_mesh) {
+            float rx = u.pos.x * cos(angle) - u.pos.y * sin(angle);
+            float ry = u.pos.x * sin(angle) + u.pos.y * cos(angle);
+
+            float x = (rx / 2.0 + pos.x * 1 + 0.5 - 1.0 / scale_x) * scale_x;
+            float y = (ry / 2.0 + pos.y * 1 + 0.5 - 1.0 / scale_y) * scale_y;
+            ret.push_back({{ x, y, u.pos.z }, u.normal, u.color, u.tex});
+        }
+        return ret;
+    };
+
+    auto add_mesh = [&](const auto &mesh) {
+        units_vertices.insert(units_vertices.end(), mesh.begin(), mesh.end());
+    };
+
+    add_mesh(unit_transform(unit_mesh, {2, 3}, pi / 4.));
+
     auto sh_vert =  new vku_shader_t(dev, vert);
     auto sh_frag =  new vku_shader_t(dev, frag);
     auto sh_ufrag = new vku_shader_t(dev, unit_frag);
@@ -256,7 +306,7 @@ int main(int argc, char const *argv[])
     auto vbuff = create_vbuff(dev, cp, vertices);
     auto ibuff = create_ibuff(dev, cp, indices);
 
-    size_t verts_sz = unit_vertices.size() * sizeof(unit_vertices[0]);
+    size_t verts_sz = unit_mesh.size() * sizeof(unit_mesh[0]) * MAX_UNIT_CNT;
     auto staging_vbuff = new vku_buffer_t(
         dev,
         verts_sz,
@@ -265,7 +315,6 @@ int main(int argc, char const *argv[])
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
     auto staging_pvbuff = staging_vbuff->map_data(0, verts_sz);
-    memcpy(staging_pvbuff, unit_vertices.data(), verts_sz);
 
     auto units_vbuff = new vku_buffer_t(
         dev,
@@ -300,11 +349,12 @@ int main(int argc, char const *argv[])
 
             float curr_time = double(get_time_ms()) - start_time;
 
-            unit_vertices[0].pos.x =  sin(curr_time / 1000.) * 0.5;
-            unit_vertices[0].pos.y =  cos(curr_time / 1000.) * 0.5;
-            unit_vertices[1].pos.x = -sin(curr_time / 1000.) * 0.5;
-            unit_vertices[1].pos.y = -cos(curr_time / 1000.) * 0.5;
-            memcpy(staging_pvbuff, unit_vertices.data(), verts_sz);
+            units_vertices.clear();
+            int pos = curr_time / 1000.;
+            add_mesh(unit_transform(unit_mesh, {pos % map_width, (pos / map_width) % map_heigth}, pi / 4.));
+
+            verts_sz = units_vertices.size() * sizeof(units_vertices[0]);
+            memcpy(staging_pvbuff, units_vertices.data(), verts_sz);
             vku_copy_buff(cp, units_vbuff, staging_vbuff, verts_sz);
 
             cbuff->begin(0);
@@ -315,10 +365,10 @@ int main(int argc, char const *argv[])
             cbuff->bind_desc_set(VK_PIPELINE_BIND_POINT_GRAPHICS, pl->vk_layout, desc_set);
             cbuff->draw_idx(pl, indices.size());
             
-            vk_cmd_set_line_width(cbuff->vk_buff, 10);
+            vk_cmd_set_line_width(cbuff->vk_buff, 3);
 
             cbuff->bind_vert_buffs(0, {{units_vbuff, 0}});
-            cbuff->draw(units_pl, unit_vertices.size());
+            cbuff->draw(units_pl, units_vertices.size());
 
             cbuff->end_rpass();
             cbuff->end();
