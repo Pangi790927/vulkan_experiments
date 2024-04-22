@@ -4,6 +4,7 @@
 #include "debug.h"
 #include "misc_utils.h"
 #include "time_utils.h"
+#include "path_finding.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -72,6 +73,7 @@ static auto create_ibuff(auto dev, auto cp, const std::vector<uint16_t>& indices
 static auto load_image(vku_cmdpool_t *cp, std::string path) {
     int w, h, chans;
     stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &chans, STBI_rgb_alpha);
+    std::vector<std::vector<double>> map_terrain;
 
     /* TODO: some more logs around here */
     vk_device_size_t imag_sz = w*h*4;
@@ -82,9 +84,17 @@ static auto load_image(vku_cmdpool_t *cp, std::string path) {
     auto img = new vku_image_t(cp->dev, w, h, VK_FORMAT_R8G8B8A8_SRGB);
     img->set_data(cp, pixels, imag_sz);
 
+    uint32_t *pixels_data = (uint32_t *)pixels;
+    for (int i = 0; i < h; i++) {
+        map_terrain.push_back(std::vector<double>(w));
+        std::string map_line = "";
+        for (int j = 0; j < w; j++) {
+            map_terrain[i][j] = (pixels_data[i * w + j] == 0xff000000 ? 100000 : 1);
+        }
+    }
     stbi_image_free(pixels);
 
-    return img;
+    return std::pair{img, map_terrain};
 }
 
 int main(int argc, char const *argv[])
@@ -98,10 +108,10 @@ int main(int argc, char const *argv[])
     // };
 
     const std::vector<vku_vertex3d_t> vertices = {
-        {{-1.0f, -1.0f,  0.1f}, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-        {{-1.0f,  1.0f,  0.1f}, {0, 0, 0}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-        {{ 1.0f,  1.0f,  0.1f}, {0, 0, 0}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-        {{ 1.0f, -1.0f,  0.1f}, {0, 0, 0}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{-1.0f, -1.0f,  0.1f}, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+        {{-1.0f,  1.0f,  0.1f}, {0, 0, 0}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+        {{ 1.0f,  1.0f,  0.1f}, {0, 0, 0}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+        {{ 1.0f, -1.0f,  0.1f}, {0, 0, 0}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
 
         // {{-0.5f, -0.5f, -0.5f}, {0, 0, 0}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
         // {{ 0.5f, -0.5f, -0.5f}, {0, 0, 0}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
@@ -182,7 +192,7 @@ int main(int argc, char const *argv[])
     auto dev =      new vku_device_t(surf);
     auto cp =       new vku_cmdpool_t(dev);
 
-    auto img = load_image(cp, "map.png");
+    auto [img, map_terrain] = load_image(cp, "map.png");
     auto view = new vku_img_view_t(img, VK_IMAGE_ASPECT_COLOR_BIT);
     auto sampl = new vku_img_sampl_t(dev, VK_FILTER_NEAREST);
 
@@ -251,6 +261,32 @@ int main(int argc, char const *argv[])
     };
 
     add_mesh(unit_transform(unit_mesh, {2, 3}, pi / 4.));
+
+    DBG("map_heigth: %d, map_width: %d", map_heigth, map_width);
+    using graph_t = matrix_graph_wraper_t<0, decltype(map_terrain)>;
+
+    graph_t graph(map_terrain, map_heigth, map_width);
+    graph_t::node_t origin = {0, 0};
+    graph_t::node_t goal = {map_heigth - 1, map_width - 1};
+
+    auto path = a_star_path<graph_t::heuristic_t, graph_t::cost_t>(
+            graph, origin, goal, graph.get_heuristic(goal));
+
+    for (auto &n : path) {
+        DBG("path node: [%d, %d]", n.y, n.x);
+        map_terrain[n.y][n.x] = -11;
+    }
+    for (int i = 0; i < map_heigth; i++) {
+        std::string map_line;
+        for (int j = 0; j < map_width; j++) {
+            map_line += map_terrain[i][j] >  10 ? "#" :
+                        map_terrain[i][j] < -10 ? "X" :
+                                                  " ";
+        }
+        DBG("map_line: %s", map_line.c_str());
+    }
+
+    DBG("path size: %ld", path.size());
 
     auto sh_vert =  new vku_shader_t(dev, vert);
     auto sh_frag =  new vku_shader_t(dev, frag);
@@ -351,7 +387,9 @@ int main(int argc, char const *argv[])
 
             units_vertices.clear();
             int pos = curr_time / 1000.;
-            add_mesh(unit_transform(unit_mesh, {pos % map_width, (pos / map_width) % map_heigth}, pi / 4.));
+            auto node = path[path.size() - 1 - (pos % path.size())];
+            // DBG("pos: %ld path node: [%d, %d]", pos % path.size(), node.y, node.x);
+            add_mesh(unit_transform(unit_mesh, {node.x, node.y}, pi / 4.));
 
             verts_sz = units_vertices.size() * sizeof(units_vertices[0]);
             memcpy(staging_pvbuff, units_vertices.data(), verts_sz);
